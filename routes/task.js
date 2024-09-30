@@ -127,31 +127,37 @@ router.delete('/:id', verifyToken, async (req, res) => {
 // Task Summary Report
 router.get('/report', verifyToken, async (req, res) => {
   try {
-    const { format = 'json', status, priority, assignedUser } = req.query;
+    const { status, priority, assignedUser, startDate, endDate, format = 'json' } = req.query;
 
+    // Build filter based on the query parameters
     const filter = {};
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
     if (assignedUser) filter.assignedUser = assignedUser;
-
-    if (!req.user.isAdmin) {
-      filter.assignedUser = req.user.id;
+    if (startDate || endDate) {
+      filter.dueDate = {};
+      if (startDate) filter.dueDate.$gte = new Date(startDate);
+      if (endDate) filter.dueDate.$lte = new Date(endDate);
     }
 
+    // Fetch tasks based on the filter
     const tasks = await Task.find(filter).populate('assignedUser', 'username email');
 
+    // Generate CSV if requested
     if (format === 'csv') {
       const fields = ['title', 'description', 'dueDate', 'status', 'priority', 'assignedUser.username'];
       const json2csvParser = new Parser({ fields });
       const csv = json2csvParser.parse(tasks);
+
       res.header('Content-Type', 'text/csv');
       res.attachment('task-report.csv');
       return res.send(csv);
     }
 
+    // Default to returning JSON
     res.status(200).json(tasks);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+  } catch (error) {
+    res.status(500).json({ message: 'Error generating report', error });
   }
 });
 
