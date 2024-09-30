@@ -31,22 +31,28 @@ router.post('/register', async (req, res) => {
 });
 
 // Login a user
+// Login a user
 router.post('/login', async (req, res) => {
   try {
-    // Check if user exists
     const user = await User.findOne({ email: req.body.email });
     if (!user) return res.status(400).json({ message: 'User not found' });
 
-    // Check if password matches
-    const validPassword = await bcrypt.compare(req.body.password, user.password);
-    if (!validPassword) return res.status(400).json({ message: 'Invalid password' });
+    const isPasswordValid = await bcrypt.compare(req.body.password, user.password);
+    if (!isPasswordValid) return res.status(400).json({ message: 'Invalid credentials' });
 
-    // Create JWT token
-    const token = jwt.sign({ id: user._id, isAdmin: user.isAdmin }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.status(200).json({ token, message: 'Login successful' });
+    // Create JWT token, including the `_id` and `isAdmin` flag
+    const token = jwt.sign({ 
+      _id: user._id,
+      isAdmin: user.isAdmin 
+    }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    // Send token and isAdmin status as part of the response
+    res.status(200).json({
+      token,
+      isAdmin: user.isAdmin, // Send this explicitly so the frontend can store it
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
-
 module.exports = router;

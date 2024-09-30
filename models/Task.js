@@ -1,23 +1,34 @@
 const mongoose = require('mongoose');
 
-const taskSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  description: { type: String },
-  dueDate: { type: Date, required: true },
+const TaskSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: true
+  },
+  description: {
+    type: String,
+    required: true
+  },
+  dueDate: {
+    type: Date,
+    required: true
+  },
   status: {
     type: String,
     enum: ['To Do', 'In Progress', 'Completed'],
-    default: 'To Do',
-  },
-  assignedUser: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User' 
+    default: 'To Do'
   },
   priority: {
     type: String,
     enum: ['Low', 'Medium', 'High'],
-    default: 'Medium',
+    default: 'Medium'
   },
-}, { timestamps: true });
+  assignedUser: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  }
+});
 
-module.exports = mongoose.model('Task', taskSchema);
+// Check if there are any middleware or hooks defined here
+module.exports = mongoose.model('Task', TaskSchema);
