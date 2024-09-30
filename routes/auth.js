@@ -55,4 +55,11 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+// Logout a user
+router.post('/logout', async (req, res) => {
+  // Since JWT is stateless, we can't invalidate the token server-side.
+  // Instead, just send a response indicating the logout was successful.
+  res.status(200).json({ message: 'Logged out successfully' });
+});
 module.exports = router;
