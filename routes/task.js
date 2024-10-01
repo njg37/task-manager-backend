@@ -1,28 +1,52 @@
 const express = require('express');
 const Task = require('../models/Task');
 const verifyToken = require('../middleware/auth');
+const Joi = require('joi');
 const router = express.Router();
 const { Parser } = require('json2csv');
 
-// Create a new task
-// Create a new task
-// Create a new task
-// Create a new task
+// Function to validate GUID
+const isGuid = (value) => {
+  const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return guidRegex.test(value);
+};
+
+// Create schema
+const createSchema = Joi.object().keys({
+  title: Joi.string().required(),
+  description: Joi.string().optional(),
+  dueDate: Joi.date().iso().optional(),
+  status: Joi.string().valid('To Do', 'In Progress', 'Completed').default('To Do'),
+  priority: Joi.string().valid('Low', 'Medium', 'High').default('Medium'),
+  assignedUser: Joi.string().custom(isGuid).optional()
+});
+
+// Update schema
+const updateSchema = Joi.object().keys({
+  title: Joi.string().optional(),
+  description: Joi.string().optional(),
+  dueDate: Joi.date().iso().optional(),
+  status: Joi.string().valid('To Do', 'In Progress', 'Completed').optional(),
+  priority: Joi.string().valid('Low', 'Medium', 'High').optional(),
+  assignedUser: Joi.string().custom(isGuid).optional()
+});
+
 // Create a new task
 router.post('/create', verifyToken, async (req, res) => {
   try {
+    const { error, value } = createSchema.validate(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
+
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
     let assignedUserId = req.user._id;
 
-    // Handle both 'assignedUser' and 'assignUser' from the request
     if (req.body.assignedUser || req.body.assignUser) {
       if (req.user.isAdmin) {
         assignedUserId = req.body.assignedUser || req.body.assignUser;
       } else {
-        // For non-admin users, always use their own ID
         assignedUserId = req.user._id;
       }
     }
@@ -30,11 +54,11 @@ router.post('/create', verifyToken, async (req, res) => {
     console.log('Assigned User ID:', assignedUserId);
 
     const newTask = new Task({
-      title: req.body.title,
-      description: req.body.description,
-      dueDate: req.body.dueDate,
-      status: req.body.status || 'To Do',
-      priority: req.body.priority || 'Medium',
+      title: value.title,
+      description: value.description,
+      dueDate: value.dueDate,
+      status: value.status,
+      priority: value.priority,
       assignedUser: assignedUserId
     });
 
@@ -52,13 +76,8 @@ router.post('/create', verifyToken, async (req, res) => {
     });
   }
 });
+
 // Get tasks for the logged-in user (or all tasks if admin)
-// In routes/task.js
-
-// In routes/task.js
-
-// In routes/task.js
-
 router.get('/', verifyToken, async (req, res) => {
   try {
     const { status, priority, page = 1, limit = 10 } = req.query;
@@ -69,14 +88,14 @@ router.get('/', verifyToken, async (req, res) => {
 
     if (!req.user.isAdmin) {
       filter.$or = [
-        { assignedUser: req.user.id },  // Tasks where the user is the assigned user
-        { creator: req.user._id }       // Tasks where the user is the creator
+        { assignedUser: req.user.id },
+        { creator: req.user._id }
       ];
     }
 
     const tasks = await Task.find(filter)
       .populate('assignedUser', 'username email')
-      .sort({ createdAt: -1 }) // Sort by creation date descending
+      .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .exec();
@@ -90,37 +109,48 @@ router.get('/', verifyToken, async (req, res) => {
     });
   } catch (err) {
     console.error('Error fetching tasks:', err);
-    res.status(500).json({ message: 'An error occurred while fetching tasks' });
+    res.status(500).json({ message: 'An error occurred while fetching tasks', error: err.message });
   }
 });
+
 // Update a task
 router.put('/:id', verifyToken, async (req, res) => {
   try {
-    let assignedUserId = req.user.id; // Default to authenticated user's ID
+    const { error, value } = updateSchema.validate(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
 
-    // Allow admin to assign tasks to other users
+    let assignedUserId = req.user.id;
+
     if (req.user.isAdmin && req.body.assignedUser) {
       assignedUserId = req.body.assignedUser;
     }
 
     const updatedTask = await Task.findByIdAndUpdate(
       req.params.id,
-      { $set: { ...req.body, assignedUser: assignedUserId } },
+      { $set: { ...value, assignedUser: assignedUserId } },
       { new: true }
     );
+
+    if (!updatedTask) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
     res.status(200).json(updatedTask);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: 'Error updating task', error: err.message });
   }
 });
 
 // Delete a task
 router.delete('/:id', verifyToken, async (req, res) => {
   try {
-    await Task.findByIdAndDelete(req.params.id);
+    const deletedTask = await Task.findByIdAndDelete(req.params.id);
+    if (!deletedTask) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
     res.status(200).json({ message: 'Task deleted successfully' });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: 'Error deleting task', error: err.message });
   }
 });
 
@@ -129,7 +159,6 @@ router.get('/report', verifyToken, async (req, res) => {
   try {
     const { status, priority, assignedUser, startDate, endDate, format = 'json' } = req.query;
 
-    // Build filter based on the query parameters
     const filter = {};
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
@@ -140,10 +169,8 @@ router.get('/report', verifyToken, async (req, res) => {
       if (endDate) filter.dueDate.$lte = new Date(endDate);
     }
 
-    // Fetch tasks based on the filter
     const tasks = await Task.find(filter).populate('assignedUser', 'username email');
 
-    // Generate CSV if requested
     if (format === 'csv') {
       const fields = ['title', 'description', 'dueDate', 'status', 'priority', 'assignedUser.username'];
       const json2csvParser = new Parser({ fields });
@@ -154,10 +181,9 @@ router.get('/report', verifyToken, async (req, res) => {
       return res.send(csv);
     }
 
-    // Default to returning JSON
     res.status(200).json(tasks);
   } catch (error) {
-    res.status(500).json({ message: 'Error generating report', error });
+    res.status(500).json({ message: 'Error generating report', error: error.message });
   }
 });
 

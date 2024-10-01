@@ -2,11 +2,29 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Joi = require('joi');
 const router = express.Router();
+
+// Define schema for user registration
+const registerSchema = Joi.object().keys({
+  username: Joi.string().alphanum().min(3).max(30).required(),
+  email: Joi.string().email().required(),
+  password: Joi.string().min(5).required()
+});
+
+// Define schema for user login
+const loginSchema = Joi.object().keys({
+  email: Joi.string().email().required(),
+  password: Joi.string().required()
+});
 
 // Register a new user
 router.post('/register', async (req, res) => {
   try {
+    // Validate input
+    const { error, value } = registerSchema.validate(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
+
     // Check if user already exists
     const userExists = await User.findOne({ email: req.body.email });
     if (userExists) return res.status(400).json({ message: 'User already exists' });
@@ -26,14 +44,17 @@ router.post('/register', async (req, res) => {
     const savedUser = await newUser.save();
     res.status(201).json(savedUser);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
 
 // Login a user
-// Login a user
 router.post('/login', async (req, res) => {
   try {
+    // Validate input
+    const { error, value } = loginSchema.validate(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
+
     const user = await User.findOne({ email: req.body.email });
     if (!user) return res.status(400).json({ message: 'User not found' });
 
@@ -52,7 +73,7 @@ router.post('/login', async (req, res) => {
       isAdmin: user.isAdmin, // Send this explicitly so the frontend can store it
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
 
@@ -62,4 +83,5 @@ router.post('/logout', async (req, res) => {
   // Instead, just send a response indicating the logout was successful.
   res.status(200).json({ message: 'Logged out successfully' });
 });
+
 module.exports = router;
