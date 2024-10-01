@@ -9,7 +9,8 @@ const router = express.Router();
 const registerSchema = Joi.object().keys({
   username: Joi.string().alphanum().min(3).max(30).required(),
   email: Joi.string().email().required(),
-  password: Joi.string().min(5).required()
+  password: Joi.string().min(5).required(),
+  role: Joi.string().valid('user', 'admin').optional() 
 });
 
 // Define schema for user login
@@ -33,11 +34,12 @@ router.post('/register', async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(req.body.password, salt);
 
-    // Create new user
+    // Create new user with role option
     const newUser = new User({
       username: req.body.username,
       email: req.body.email,
       password: hashedPassword,
+      isAdmin: req.body.role === 'admin', // Set isAdmin based on the role
     });
 
     // Save the user to the database
